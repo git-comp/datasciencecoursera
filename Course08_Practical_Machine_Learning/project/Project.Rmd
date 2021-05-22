@@ -1,0 +1,84 @@
+---
+title: "Practical Machine Learning: Project Assessment"
+author: "git-comp"
+date: "20 May 2021"
+output: html_document
+keep_md: true
+---
+  
+## Assignment
+The coursera assignment states:
+> Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement ??? a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website (here)[http://groupware.les.inf.puc-rio.br/har] (see the section on the Weight Lifting Exercise Dataset).
+
+## Introduction
+This document summarizes my approach to this assignment. 
+
+## Loading the data
+```{r, echo=TRUE, cache=TRUE}
+library("data.table")
+library(ggplot2)
+library(caret)
+set.seed(1234)
+## Training Set
+trainingUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(trainingUrl, destfile = paste0(getwd(), '/pml-training.csv'), method = "curl")
+trainingData <- read.csv("./pml-training.csv", na.strings=c("NA", ""))
+dim(trainingData)
+str(trainingData)
+
+## Testing Set
+testingUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(testingUrl, destfile = paste0(getwd(), '/pml-testing.csv'), method = "curl")
+testData <- read.csv("./pml-testing.csv", na.strings=c("NA", ""))
+dim(testData)
+str(trainingData)
+```
+
+From the str() command, we see that many of the 160 columns contain NA or blank values. So I decide to remove columns where more than 75% of the values are NA or blank, as 75% of missing values are too many to impute some artificial values.
+```{r, echo=TRUE, cache=TRUE}
+prunedTrainingData <- trainingData[,-which(colSums(is.na(trainingData) | trainingData == "") > 0.75 * dim(trainingData)[1])]
+dim(prunedTrainingData)
+prunedTestData <- testData[,-which(colSums(is.na(testData) | testData == "") > 0.75 * dim(testData)[1])]
+dim(prunedTestData)
+```
+Additionally, columns 1 to 7 only contain user specific data, which should not be relevant for our model. It will be removed, as well:
+
+```{r, echo=TRUE, cache=TRUE}
+prunedTrainingData <- prunedTrainingData[,-c(1:7)]
+dim(prunedTrainingData)
+prunedTestData <- prunedTestData[,-c(1:7)]
+dim(prunedTestData)
+```
+For cross validation, we will split the prunedTrainingData into two sets:
+```{r, echo=TRUE, cache=TRUE}
+inTrain <- createDataPartition(prunedTrainingData$classe, p=0.70, list=FALSE)
+splitTrainingData <- prunedTrainingData[inTrain, ]
+splitCrossvalidationData <- prunedTrainingData[-inTrain, ]
+```
+
+## Random Forest
+```{r, echo=TRUE, cache=TRUE}
+tr <- trainControl(method="cv", number=5)
+randomForestMod <- train(classe~., data=splitTrainingData, method="rf", trControl=tr, verbose=FALSE)
+randomForestMod
+## Plot Accuracy vs. number of randomly selected predictors
+plot(randomForestMod, main="Accuracy vs. number of randomly selected predictors")
+
+## Use cv set to check for accuracy
+predictCrossValidate <- predict(randomForestMod, newdata=splitCrossvalidationData)
+confusionMatrixRandomForest <- confusionMatrix(factor(splitCrossvalidationData$classe), predictCrossValidate)
+confusionMatrixRandomForest$table
+confusionMatrixRandomForest$overall["Accuracy"]
+
+## Show most important variables of model
+varImp(randomForestMod)
+plot(randomForestMod$finalModel)
+
+```
+
+## Conclusion
+The random forest model provides an accuracy of 99,42%. I will use it on the original test data set (prunedTestData):
+```{r, echo=TRUE, cache=TRUE}
+predict(randomForestMod, newdata=prunedTestData)
+```
+
