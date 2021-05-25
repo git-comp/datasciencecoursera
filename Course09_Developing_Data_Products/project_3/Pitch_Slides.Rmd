@@ -1,0 +1,70 @@
+---
+title: "Mini-Pitch for ShinyApp"
+author: "git-comp"
+date: "24 5 2021"
+output: ioslides_presentation
+widescreen: yes
+smaller: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Context, Data, Sources
+### Context
+For this assignment, I have used **official COVID-19 data for Switzerland** available as of May 21, 2021. I have generated an interactive overview of COVID-19 cases per calender week from Feb 2020 until May 2021 per State (called Canton in Switzerland).
+
+In the ShinyUI, checkboxes allow the selection of individual states. In the pitch presentation, I have selected all states.
+
+### Data Source
+https://www.covid19.admin.ch/api/data/20210521-abejzev6/downloads/sources-csv.zip
+
+### Overview of Structure and further info
+https://www.covid19.admin.ch/en/overview
+
+## Data Preparation (I/II)
+```{r echo = TRUE, cache= TRUE}
+library("data.table")
+library("ggplot2")
+fileUrl <- "https://www.covid19.admin.ch/api/data/20210521-abejzev6/downloads/sources-csv.zip" 
+download.file(fileUrl, destfile = paste0(getwd(), '/sources-csv.zip'), method = "curl")
+unzip("sources-csv.zip")
+
+## parse file with weekly figures per georegion (incl. aggregated 
+##  regions CH01..CH07, CHFL, CH)
+casesGeoRegionDT <- data.table::fread(input = ".//data//COVID19Cases_geoRegion_w.csv")
+
+## Only select columns geoRegion, datum, entries
+cpgraw <- casesGeoRegionDT[, c("geoRegion","datum","entries")]
+```
+
+## Data Preparation (II/II)
+```{r echo = TRUE, cache= TRUE}
+## remove aggregated regions CH01..CH07, CHFL, CH to avoid redundancy and double counting
+cpgraw <- cpgraw[cpgraw$geoRegion != "CH" & cpgraw$geoRegion != "CH01" & 
+                   cpgraw$geoRegion != "CH02" & cpgraw$geoRegion != "CH03" & 
+                   cpgraw$geoRegion != "CH04" & cpgraw$geoRegion != "CH05" & 
+                   cpgraw$geoRegion != "CH06" & cpgraw$geoRegion != "CH07" & 
+                   cpgraw$geoRegion != "CHFL"]
+
+cpgraw$geoRegionFactor <- as.factor(cpgraw$geoRegion)
+cpgraw$datumFactor <- as.factor(cpgraw$datum)
+
+cpgrawDF <- as.data.frame(cpgraw)
+
+```
+
+## COVID-19 cases in Switzerland per region and calendar week
+```{r echo = FALSE, cache= TRUE, warning=FALSE}
+## In the app, filters would now be applied based on checkboxes, e.g. 
+# cpgrawDFDisplay <- rbind(cpgrawDFDisplay, subset(cpgrawDF,cpgrawDF$geoRegion == "ZG"))
+
+## For the presentation, we add all States/Cantons
+cpgrawDFDisplay <- cpgrawDF
+
+ggplot(cpgrawDFDisplay, aes(x = datumFactor, y=entries)) +
+            geom_col(aes(fill = geoRegionFactor))
+
+```
+
